@@ -1,0 +1,8 @@
+{"settings":{"brand":"ENKANG","tagline":"Maasai cultural wear and beadwork","whatsapp":"","email":"","address":"","hours":"","story":"Tell your story here: who makes the pieces, where, and how long a collar takes. Edit this in Admin, Settings.","images":{"hero":"public/images/photo-1.jpg","story":"public/images/photo-3.jpg","banner":"public/images/photo-9.jpg","collars":"public/images/photo-10.jpg","cuffs":"public/images/photo-16.jpg","headbands":"public/images/photo-11.jpg","shukas":"public/images/photo-5.jpg"}},
+"products":[
+{"id":"p1","name":"Beaded collar","cat":"collars","price":"","status":"published","desc":"Add a description in Admin.","materials":"","img":"public/images/photo-10.jpg","pos":"50% 50%"},
+{"id":"p2","name":"Bead strands","cat":"collars","price":"","status":"published","desc":"Add a description in Admin.","materials":"","img":"public/images/photo-11.jpg","pos":"30% 50%"},
+{"id":"p3","name":"Beaded panel","cat":"cuffs","price":"","status":"published","desc":"Add a description in Admin.","materials":"","img":"public/images/photo-16.jpg","pos":"50% 60%"},
+{"id":"p4","name":"Collar set","cat":"headbands","price":"","status":"published","desc":"Add a description in Admin.","materials":"","img":"public/images/photo-1.jpg","pos":"50% 70%"},
+{"id":"p5","name":"Shuka, red check","cat":"shukas","price":"","status":"published","desc":"Add a description in Admin.","materials":"","img":"public/images/photo-5.jpg","pos":"50% 30%"},
+{"id":"p6","name":"Shuka, striped","cat":"shukas","price":"","status":"published","desc":"Add a description in Admin.","materials":"","img":"public/images/photo-9.jpg","pos":"50% 60%"}]}
