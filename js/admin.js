@@ -1,53 +1,63 @@
-import { D, persist, reset, replace, shrink, load } from './store.js';
-import { esc, catName } from './views.js';
-const CATS = ['collars', 'cuffs', 'headbands', 'shukas'];
-const SLOTS = [['hero', 'Home hero'], ['collars', 'Collars tile'], ['cuffs', 'Cuffs tile'], ['headbands', 'Headbands tile'], ['shukas', 'Shukas tile'], ['story', 'Home story image'], ['banner', 'Story page banner']];
-export let dirty = false;
-export const setDirty = (v) => { dirty = v; const b = document.getElementById('dirty'); if (b) b.textContent = v ? 'You have unsaved changes' : 'All changes saved'; };
-const opt = (list, cur, f = (x) => x) => list.map((x) => `<option value="${x}"${x === cur ? ' selected' : ''}>${f(x)}</option>`).join('');
-
-export function admin(tab = 'products') {
-  const t = (k, n) => `<a href="#/admin/${k}"${tab === k ? ' aria-current="page"' : ''}>${n}</a>`;
-  let body = '';
-  if (tab === 'products') body = `<div class="sech"><h1 style="font-size:clamp(36px,5vw,52px)">Products</h1><button class="btn" data-add>Add product</button></div>
-<div class="cd" style="padding:8px 24px 16px">${D.products.map((p) => `<div class="arow" data-pid="${esc(p.id)}"><div class="zm"><img class="ph" src="${esc(p.img)}" alt=""></div>
-<input class="in" data-k="name" value="${esc(p.name)}" aria-label="Name"><input class="in" data-k="price" value="${esc(p.price)}" placeholder="Price in KES" aria-label="Price" inputmode="numeric">
-<select class="in" data-k="cat" aria-label="Category">${opt(CATS, p.cat, catName)}</select><select class="in" data-k="status" aria-label="Status">${opt(['published', 'draft'], p.status, (x) => x[0].toUpperCase() + x.slice(1))}</select>
-<div style="display:flex;gap:8px;grid-column:span 1"><label class="btn2" style="min-height:44px;padding:0 14px;cursor:pointer">Image<input class="vh" type="file" accept="image/*" data-pimg></label><button class="btn2" style="min-height:44px;padding:0 14px" data-del aria-label="Delete ${esc(p.name)}">Delete</button></div>
-<textarea class="in" data-k="desc" rows="2" aria-label="Description" placeholder="Description" style="grid-column:1/-1">${esc(p.desc)}</textarea></div>`).join('') || '<p style="padding:24px">No products yet.</p>'}</div>`;
-  if (tab === 'images') body = `<h1 style="font-size:clamp(36px,5vw,52px);margin-bottom:24px">Site images</h1><div class="slots">${SLOTS.map(([k, n]) => `<div data-slot="${k}"><div class="zm"><img class="ph" src="${esc(D.settings.images[k])}" alt=""></div><div style="display:flex;justify-content:space-between;align-items:center"><span>${n}</span><label class="ey" style="cursor:pointer;padding:10px 0">Replace<input class="vh" type="file" accept="image/*" data-simg></label></div></div>`).join('')}</div>`;
-  if (tab === 'settings') {
-    const s = D.settings, f = (k, n, ph = '') => `<label class="f">${n}<input class="in" data-s="${k}" value="${esc(s[k])}" placeholder="${ph}"></label>`;
-    body = `<h1 style="font-size:clamp(36px,5vw,52px);margin-bottom:24px">Settings</h1><div class="cd" style="padding:24px;display:grid;gap:16px;max-width:640px">${f('brand', 'Shop name')}${f('tagline', 'Tagline')}${f('whatsapp', 'WhatsApp number with country code', '254700000000')}${f('email', 'Email')}${f('address', 'Address')}${f('hours', 'Opening hours')}<label class="f">Our story<textarea class="in" data-s="story" rows="6">${esc(s.story)}</textarea></label></div>
-<h2 style="font-size:36px;margin:40px 0 12px">Backup</h2><div class="row"><button class="btn2" data-export>Download catalog.json</button><label class="btn2" style="cursor:pointer">Import catalog.json<input class="vh" type="file" accept="application/json" data-import></label><button class="btn2" data-reset>Reset to published</button></div>`;
-  }
-  return `<div class="adm"><aside><a class="logo" href="#/" style="padding:0 16px 16px">${esc(D.settings.brand)}</a>${t('products', 'Products')}${t('images', 'Site images')}${t('settings', 'Settings')}<a href="#/">View site</a><div class="sw" role="radiogroup" aria-label="Theme" style="margin-top:auto">${[['red', '#a8231a'], ['green', '#1f6b3a'], ['dark', '#17110d']].map(([k, c]) => `<input class="vh" type="radio" name="theme" id="t-${k}" value="${k}"><label for="t-${k}"><i style="background:linear-gradient(90deg,${c},#e7a914)"></i></label>`).join('')}</div></aside>
-<main>${body}</main><div class="savebar"><span id="dirty" style="color:var(--soft)">All changes saved</span><div class="row"><button class="btn2" data-discard>Discard changes</button><button class="btn" data-save-all>Save changes</button></div></div></div>`;
+// Admin panel. Static hosting cannot write to the repo, so edits are saved in this browser only.
+// Export them from Backup and replace data/catalog.json to publish.
+import { D, persist, reset, replace, shrink, cat } from './store.js';
+import { esc, kes, ic, toast, busy } from './ui.js';
+const TABS = [['overview', 'Overview', 'grid'], ['products', 'Products', 'box'], ['orders', 'Orders', 'list'], ['gallery', 'Gallery', 'image'], ['settings', 'Settings', 'sliders'], ['backup', 'Backup', 'download']];
+const label = (s) => (s.startsWith('data:') ? 'Uploaded photo' : s.split('/').pop().replace(/\.\w+$/, '').replace(/-/g, ' '));
+const imgs = () => [...new Set([...D.products.map((p) => p.img), ...D.gallery.map((g) => g.img), ...D.categories.map((c) => c.img), ...Object.values(D.settings.images)])].filter(Boolean);
+const opts = (sel) => imgs().map((s) => `<option value="${esc(s)}" ${s === sel ? 'selected' : ''}>${esc(label(s))}</option>`).join('');
+const date = (d) => (d ? new Date(d).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' }) : '');
+const ST = ['New', 'Confirmed', 'Delivered', 'Cancelled'];
+const orders = (L, full) => L.length ? `<div class="tw"><table><thead><tr><th>Order</th><th>Customer</th>${full ? '<th>Items</th>' : ''}<th>Total</th><th>Status</th>${full ? '<th></th>' : ''}</tr></thead><tbody>${L.map((o) => `<tr><td class="num">#${esc(o.id)}<div class="mut" style="font-size:12px">${date(o.date)}</div></td><td>${esc(o.who)}<div class="mut" style="font-size:12px">${esc(o.phone)} · ${o.mode === 'deliver' ? 'Deliver: ' + esc(o.loc) : 'Collect'}</div></td>${full ? `<td class="soft">${o.items.map((i) => i.qty + ' × ' + esc(i.name)).join(', ')}</td>` : ''}<td class="num">${kes(o.total)}</td><td><select class="inp" style="min-height:36px;width:auto" data-os="${esc(o.id)}" aria-label="Status of order ${esc(o.id)}">${ST.map((s) => `<option ${s === o.status ? 'selected' : ''}>${s}</option>`).join('')}</select></td>${full ? `<td><button class="ib" data-a="odel" data-id="${esc(o.id)}" aria-label="Delete order">${ic('trash')}</button></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '<div class="stat"><p class="soft">No orders yet. Orders placed from the order list sidebar show up here</p></div>';
+const T = {
+  overview: () => { const lo = D.products.filter((p) => p.stock < 20 && p.status === 'published').length, op = D.orders.filter((o) => ['New', 'Confirmed'].includes(o.status)).length, mx = Math.max(1, ...D.products.map((p) => p.stock)); return `<div class="st3"><div class="stat"><span class="soft">Open orders</span><b class="f num">${op}</b><span class="mut">${D.orders.length} orders in total</span></div><div class="stat"><span class="soft">Products live</span><b class="f num">${D.products.filter((p) => p.status === 'published').length}</b><span class="mut">of ${D.products.length}</span></div><div class="stat"><span class="soft">Low stock</span><b class="f num">${lo}</b><span class="mut">under 20 pieces</span></div></div><div class="two" style="grid-template-columns:1fr 1.2fr;gap:24px;align-items:start"><div class="stat"><h3 style="margin-bottom:12px">Stock levels</h3>${[...D.products].sort((a, b) => a.stock - b.stock).map((p) => `<div style="margin-bottom:12px"><div class="rw"><span>${esc(p.name)}</span><span class="num mut">${p.stock}</span></div><div class="bar"><i class="${p.stock < 20 ? 'l' : ''}" style="width:${Math.max(2, p.stock / mx * 100)}%"></i></div></div>`).join('')}</div><div><h3 style="margin-bottom:12px">Recent orders</h3>${orders(D.orders.slice(0, 4))}</div></div>`; },
+  products: () => `<div class="rw" style="margin:8px 0 20px"><span class="soft">${D.products.length} products</span><button class="btn sm" data-a="edit">${ic('plus', 16)}Add product</button></div><div class="tw"><table><thead><tr><th>Product</th><th>Category</th><th>Price</th><th>Stock</th><th>Live</th><th></th></tr></thead><tbody>${D.products.map((p) => `<tr><td><div class="th"><div class="im"><img src="${esc(p.img)}" alt=""></div><div><div>${esc(p.name)}</div><span class="tg">${esc(p.size)}</span></div></div></td><td class="soft">${esc(cat(p.cat).name)}</td><td class="num">${kes(p.price)}</td><td class="num" ${p.stock < 20 ? 'style="color:var(--a)"' : ''}>${p.stock}</td><td><button class="sw" role="switch" aria-checked="${p.status === 'published'}" aria-label="Live in shop" data-a="tog" data-id="${p.id}"></button></td><td style="text-align:right;white-space:nowrap"><button class="ib" data-a="edit" data-id="${p.id}" aria-label="Edit ${esc(p.name)}">${ic('edit')}</button><button class="ib" data-a="del" data-id="${p.id}" aria-label="Delete ${esc(p.name)}">${ic('trash')}</button></td></tr>`).join('')}</tbody></table></div>`,
+  orders: () => `<div style="margin-top:20px">${orders(D.orders, 1)}</div>`,
+  gallery: () => { const tags = [...new Set(['Timber', 'Posts', 'Furniture', 'Fencing', 'Firewood', ...D.gallery.map((g) => g.tag)])]; return `<div class="rw" style="margin:8px 0 20px"><span class="soft">${D.gallery.length} photos</span><label class="btn sm" style="cursor:pointer">${ic('plus', 16)}Add photo<input type="file" accept="image/*" id="gadd" class="vh" style="position:absolute;opacity:0;width:1px;height:1px"></label></div><div class="ag">${D.gallery.map((g, i) => `<div class="stat"><div class="im"><img src="${esc(g.img)}" alt=""></div><input class="inp" data-gc="${i}" value="${esc(g.cap)}" aria-label="Caption"><div class="rw"><select class="inp" style="min-height:36px" data-gt="${i}" aria-label="Group">${tags.map((t) => `<option ${t === g.tag ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select><button class="ib" data-a="gdel" data-id="${i}" aria-label="Remove photo">${ic('trash')}</button></div></div>`).join('')}</div>`; },
+  settings: () => { const s = D.settings; return `<form class="stat" data-form="settings" style="max-width:640px;display:grid;gap:16px;margin-top:24px"><label class="fld">Yard name<input class="inp" name="brand" value="${esc(s.brand)}" required></label><label class="fld">Tagline<textarea class="inp" name="tagline" rows="2">${esc(s.tagline)}</textarea></label><label class="fld">Our story, separate paragraphs with a blank line<textarea class="inp" name="story" rows="7">${esc(s.story.join('\n\n'))}</textarea></label><label class="fld">Yard address<input class="inp" name="address" value="${esc(s.address)}"></label><label class="fld">Opening hours<input class="inp" name="hours" value="${esc(s.hours)}"></label><label class="fld">WhatsApp number with country code<input class="inp" name="whatsapp" value="${esc(s.whatsapp)}" placeholder="2547…" inputmode="numeric"></label><label class="fld">Email<input class="inp" name="email" type="email" value="${esc(s.email)}"></label>${['hero', 'story', 'about'].map((k) => `<label class="fld">${{ hero: 'Home hero photo', story: 'Home story photo', about: 'Our story page photo' }[k]}<select class="inp" name="img_${k}">${opts(s.images[k])}</select></label>`).join('')}<div><button class="btn" type="submit">Save settings</button></div></form>`; },
+  backup: () => `<div class="stat" style="max-width:640px;display:grid;gap:16px;margin-top:24px"><p class="soft">Edits are saved in this browser only. To publish them, download catalog.json, replace <span class="tg">data/catalog.json</span> in the project and upload the site again. Uploaded photos travel inside the file; for many photos, put the image files in <span class="tg">public/images/</span> instead.</p><div class="row"><button class="btn" data-a="export">${ic('download', 16)}Download catalog.json</button><label class="b2" style="cursor:pointer">Import catalog.json<input type="file" accept="application/json" id="imp" style="position:absolute;opacity:0;width:1px;height:1px"></label><button class="b2" data-a="reset">Reset to published</button></div></div>`
+};
+export function render(tab) {
+  tab = T[tab] ? tab : 'overview';
+  return `<div class="ad"><aside><a href="#/" style="margin-bottom:12px">${ic('back')}Back to site</a>${TABS.map(([k, n, i]) => `<a href="#/admin/${k}" ${k === tab ? 'aria-current="page"' : ''}>${ic(i)}${n}</a>`).join('')}</aside><main><h1 style="font-size:32px">${TABS.find((t) => t[0] === tab)[1]}</h1>${T[tab]()}</main></div>`;
 }
-export function bindAdmin(root, toast, rerender) {
-  const P = (el) => D.products.find((p) => p.id === el.closest('[data-pid]')?.dataset.pid);
-  root.oninput = (e) => {
-    const el = e.target;
-    if (el.dataset.k) { const p = P(el); if (p) { p[el.dataset.k] = el.value; setDirty(true); } }
-    if (el.dataset.s) { D.settings[el.dataset.s] = el.value; setDirty(true); }
+function form(id) {
+  const p = D.products.find((x) => String(x.id) === String(id)) || { name: '', cat: D.categories[0].id, size: '', wood: '', price: '', stock: 0, img: imgs()[0], status: 'published', desc: '' };
+  const d = document.createElement('dialog');
+  d.innerHTML = `<form method="dialog"><h2 style="font-size:24px">${id ? 'Edit product' : 'Add product'}</h2><label class="fld">Name<input class="inp" name="name" value="${esc(p.name)}" required></label><div class="row"><label class="fld" style="flex:1">Category<select class="inp" name="cat">${D.categories.map((c) => `<option value="${c.id}" ${c.id === p.cat ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></label><label class="fld" style="flex:1">Size<input class="inp" name="size" value="${esc(p.size)}" placeholder="2×4 · 12 ft"></label></div><div class="row"><label class="fld" style="flex:1">Price (KES)<input class="inp" name="price" type="number" min="0" value="${p.price}" placeholder="Empty = ask on WhatsApp"></label><label class="fld" style="flex:1">Stock<input class="inp" name="stock" type="number" min="0" value="${p.stock}" required></label></div><label class="fld">Wood<input class="inp" name="wood" value="${esc(p.wood)}"></label><label class="fld">Description<textarea class="inp" name="desc" rows="3">${esc(p.desc)}</textarea></label><label class="fld">Photo<select class="inp" name="img">${opts(p.img)}</select></label><label class="fld">Or upload a photo<input class="inp" type="file" accept="image/*" id="pf-up" style="padding:9px 14px"></label><div class="row" style="justify-content:flex-end"><button class="b2" value="x" formnovalidate>Cancel</button><button class="btn" value="s">Save</button></div></form>`;
+  document.body.append(d); d.showModal(); d.onclose = () => d.remove();
+  d.querySelector('#pf-up').onchange = async (e) => { try { const u = await shrink(e.target.files[0]), s = d.querySelector('[name=img]'); s.insertAdjacentHTML('afterbegin', `<option value="${u}" selected>Uploaded photo</option>`); s.value = u; } catch (er) { toast(er.message); } };
+  d.querySelector('form').onsubmit = (e) => {
+    if (e.submitter.value !== 's') return; e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target)); delete f['undefined'];
+    busy(e.submitter, 'Saving…', 700, () => { const o = { name: f.name.trim(), cat: f.cat, size: f.size.trim(), wood: f.wood.trim(), price: f.price === '' ? '' : +f.price, stock: +f.stock, img: f.img, desc: f.desc.trim() }; if (id) Object.assign(D.products.find((x) => String(x.id) === String(id)), o); else D.products.unshift({ ...o, id: Date.now(), status: 'published' }); save('Product saved'); d.close(); });
   };
-  root.onchange = async (e) => {
-    const el = e.target;
-    try {
-      if (el.dataset.k === 'cat' || el.dataset.k === 'status') { P(el)[el.dataset.k] = el.value; setDirty(true); }
-      if (el.dataset.pimg && el.files[0]) { const p = P(el); p.img = await shrink(el.files[0]); p.pos = '50% 50%'; setDirty(true); rerender(); }
-      if (el.dataset.simg && el.files[0]) { D.settings.images[el.closest('[data-slot]').dataset.slot] = await shrink(el.files[0], 1400); setDirty(true); rerender(); }
-      if (el.dataset.import && el.files[0]) { const o = JSON.parse(await el.files[0].text()); if (!o.products || !o.settings) throw new Error('That file is not a catalog export.'); replace(o); setDirty(false); rerender(); toast('Catalog imported'); }
-    } catch (err) { toast(err.message, 'error'); }
-  };
-  root.onclick = async (e) => {
-    const b = e.target.closest('button'); if (!b) return;
-    if (b.dataset.saveAll !== undefined) { persist() ? (setDirty(false), toast('Changes saved')) : toast('Storage is full. Download catalog.json and use smaller images.', 'error'); }
-    if (b.dataset.discard !== undefined) { await load(); setDirty(false); rerender(); toast('Changes discarded'); }
-    if (b.dataset.add !== undefined) { D.products.unshift({ id: 'p' + Date.now().toString(36), name: 'New piece', cat: 'collars', price: '', status: 'draft', desc: '', materials: '', img: D.settings.images.collars, pos: '50% 50%' }); setDirty(true); rerender(); }
-    if (b.dataset.del !== undefined) { const p = P(b); if (p && confirm(`Delete "${p.name}"? This cannot be undone.`)) { D.products.splice(D.products.indexOf(p), 1); setDirty(true); rerender(); } }
-    if (b.dataset.export !== undefined) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(D, null, 2)], { type: 'application/json' })); a.download = 'catalog.json'; a.click(); toast('Downloaded. Commit it to data/catalog.json to publish.'); }
-    if (b.dataset.reset !== undefined && confirm('Remove your local edits and show the published catalog?')) { reset(); await load(); setDirty(false); rerender(); toast('Reset to published'); }
-  };
-  window.onbeforeunload = () => (document.getElementById('dirty') && document.getElementById('dirty').textContent.startsWith('You') ? true : undefined);
+}
+let again = () => {};
+const save = (m) => { if (!persist()) toast('Browser storage is full. Download a backup'); else if (m) toast(m); again(); };
+export function init(app, rerender) {
+  again = rerender;
+  app.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-a]'); if (!t || !app.querySelector('.ad')) return; const a = t.dataset.a, id = t.dataset.id;
+    if (a === 'edit') form(id);
+    else if (a === 'tog') { const p = D.products.find((x) => String(x.id) === id); p.status = p.status === 'published' ? 'hidden' : 'published'; save(p.name + (p.status === 'published' ? ' is live' : ' hidden from the shop')); }
+    else if (a === 'del') { if (confirm('Delete this product?')) { D.products = D.products.filter((x) => String(x.id) !== id); save('Product deleted'); } }
+    else if (a === 'odel') { if (confirm('Delete this order?')) { D.orders = D.orders.filter((o) => o.id !== id); save('Order deleted'); } }
+    else if (a === 'gdel') { D.gallery.splice(+id, 1); save('Photo removed'); }
+    else if (a === 'export') { const b = new Blob([JSON.stringify(D, null, 2)], { type: 'application/json' }), l = document.createElement('a'); l.href = URL.createObjectURL(b); l.download = 'catalog.json'; l.click(); URL.revokeObjectURL(l.href); }
+    else if (a === 'reset') { if (confirm('Discard all edits made in this browser and go back to the published catalog?')) { reset(); location.reload(); } }
+  });
+  app.addEventListener('change', async (e) => {
+    const t = e.target; if (!app.querySelector('.ad')) return;
+    if (t.dataset.os) { D.orders.find((o) => o.id === t.dataset.os).status = t.value; save('Order #' + t.dataset.os + ' marked ' + t.value.toLowerCase()); }
+    else if (t.dataset.gc !== undefined) { D.gallery[+t.dataset.gc].cap = t.value; save(); toast('Caption saved'); }
+    else if (t.dataset.gt !== undefined) { D.gallery[+t.dataset.gt].tag = t.value; save('Group updated'); }
+    else if (t.id === 'gadd' && t.files[0]) { try { D.gallery.unshift({ img: await shrink(t.files[0], 1000), cap: 'New photo', tag: 'Timber' }); save('Photo added. Edit its caption below'); } catch (er) { toast(er.message); } }
+    else if (t.id === 'imp' && t.files[0]) { try { const o = JSON.parse(await t.files[0].text()); if (!o.products || !o.settings) throw 0; replace(o); toast('Catalog imported'); again(); document.dispatchEvent(new CustomEvent('site-updated')); } catch { toast('That file is not a valid catalog.json'); } }
+  });
+  app.addEventListener('submit', (e) => {
+    if (e.target.dataset.form !== 'settings') return; e.preventDefault();
+    const f = Object.fromEntries(new FormData(e.target)), s = D.settings;
+    busy(e.submitter, 'Saving…', 700, () => { s.brand = f.brand.trim() || s.brand; s.tagline = f.tagline.trim() || s.tagline; const st = f.story.split(/\n\s*\n/).map((x) => x.trim()).filter(Boolean); if (st.length) s.story = st; s.address = f.address.trim(); s.hours = f.hours.trim(); s.whatsapp = f.whatsapp.replace(/\D/g, ''); s.email = f.email.trim(); ['hero', 'story', 'about'].forEach((k) => (s.images[k] = f['img_' + k])); persist(); document.dispatchEvent(new CustomEvent('site-updated')); toast('Settings saved'); });
+  });
 }

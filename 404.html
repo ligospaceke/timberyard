@@ -4,20 +4,24 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <script>
-(function(){var d=document.documentElement,t=null;try{t=localStorage.getItem('enkang:theme');if(sessionStorage.getItem('enkang:seen'))d.className+=' no-loader'}catch(e){}
-if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'red';d.setAttribute('data-theme',t)})();
+(function(){var d=document.documentElement,t=null;try{t=localStorage.getItem('pty:theme')}catch(e){}
+if(!t)t=matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';d.setAttribute('data-theme',t)})();
 </script>
-<title>Enkang · Maasai cultural wear and beadwork</title>
-<meta name="description" content="Maasai shukas, beaded collars, cuffs and headbands, made by hand in Kenya.">
+<title>Peggy’s Timber Yard · Timber, posts, furniture and fencing</title>
+<meta name="description" content="Timber for building, fencing and roofing. Browse the yard, build an order list and send it on WhatsApp.">
+<meta property="og:title" content="Peggy’s Timber Yard">
+<meta property="og:description" content="Wood for houses, fences, roofs and furniture.">
 <link rel="icon" href="public/favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="css/fonts.css">
 <link rel="stylesheet" href="css/app.css">
-<script type="module" src="js/main.js"></script>
+<meta http-equiv="refresh" content="0;url=./"><script type="module" src="js/main.js"></script>
 </head>
 <body>
-<div id="loader" class="ld" aria-hidden="true"><b>ENKANG</b><div><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div></div>
-<div id="app"></div>
+<a class="skip" href="#main" onclick="event.preventDefault();document.getElementById('app').focus()">Skip to content</a>
+<div id="hd"></div>
+<main id="app" tabindex="-1"></main>
+<div id="ft"></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<noscript><p style="padding:24px">Enkang needs JavaScript to browse the shop.</p></noscript>
+<noscript><p style="padding:24px">Peggy’s Timber Yard needs JavaScript to browse the shop.</p></noscript>
 </body>
 </html>
